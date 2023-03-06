@@ -1,0 +1,62 @@
+
+
+Sub originalBackup()
+'select pivot table cell first
+Dim ws As Worksheet
+Dim pt As PivotTable
+Dim rngPT As Range
+Dim rngPTa As Range
+Dim rngCopy As Range
+Dim rngCopy2 As Range
+Dim lRowTop As Long
+Dim lRowsPT As Long
+Dim lRowPage As Long
+Dim msgSpace As String
+
+On Error Resume Next
+Set pt = ActiveCell.PivotTable
+Set rngPTa = pt.PageRange
+On Error GoTo errHandler
+
+If pt Is Nothing Then
+    MsgBox "Could not copy pivot table for active cell"
+    GoTo exitHandler
+End If
+
+If pt.PageFieldOrder = xlOverThenDown Then
+  If pt.PageFields.Count > 1 Then
+    msgSpace = "Horizontal filters with spaces." _
+      & vbCrLf _
+      & "Could not copy Filters formatting."
+  End If
+End If
+
+Set rngPT = pt.TableRange1
+lRowTop = rngPT.Rows(1).Row
+lRowsPT = rngPT.Rows.Count
+Set ws = Worksheets.Add
+Set rngCopy = rngPT.Resize(lRowsPT - 1)
+Set rngCopy2 = rngPT.Rows(lRowsPT)
+
+rngCopy.Copy Destination:=ws.Cells(lRowTop, 1)
+rngCopy2.Copy _
+  Destination:=ws.Cells(lRowTop + lRowsPT - 1, 1)
+
+If Not rngPTa Is Nothing Then
+    lRowPage = rngPTa.Rows(1).Row
+    rngPTa.Copy Destination:=ws.Cells(lRowPage, 1)
+End If
+    
+ws.Columns.AutoFit
+If msgSpace <> "" Then
+  MsgBox msgSpace
+End If
+
+exitHandler:
+    Exit Sub
+errHandler:
+    MsgBox "Could not copy pivot table for active cell"
+    Resume exitHandler
+End Sub
+
+

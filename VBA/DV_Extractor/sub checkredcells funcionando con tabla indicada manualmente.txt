@@ -1,0 +1,39 @@
+Sub CheckRedCells()
+    Dim table As Range
+    Set table = Range("I34:L36") ' Replace with the range of your table
+    
+    Dim rowHeaders() As String
+    ReDim rowHeaders(1 To table.Rows.Count)
+    For i = 1 To table.Rows.Count
+        rowHeaders(i) = table.Cells(i, 1).Value
+    Next i
+    
+    Dim colHeaders() As String
+    ReDim colHeaders(1 To table.Columns.Count)
+    For i = 1 To table.Columns.Count
+        colHeaders(i) = table.Cells(1, i).Value
+    Next i
+    
+    Dim outputSheet As Worksheet
+    Set outputSheet = Worksheets.Add(After:=Worksheets(Worksheets.Count))
+    outputSheet.Name = "Red Cells"
+    outputSheet.Range("A1").Value = "Campaign"
+    outputSheet.Range("B1").Value = "Partner"
+    outputSheet.Range("C1").Value = "Metric"
+    
+    Dim outputRow As Long
+    outputRow = 2
+    
+    For i = 2 To table.Rows.Count
+        For j = 2 To table.Columns.Count
+            If table.Cells(i, j).DisplayFormat.Font.Color = vbRed Then
+                outputSheet.Cells(outputRow, 1).Value = table.Cells(i, 2).Value
+                outputSheet.Cells(outputRow, 2).Value = table.Cells(i, 1).Value
+                outputSheet.Cells(outputRow, 3).Value = colHeaders(j)
+                
+                
+                outputRow = outputRow + 1
+            End If
+        Next j
+    Next i
+End Sub

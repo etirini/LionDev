@@ -1,0 +1,89 @@
+'Cambia el layout, repite labels, copia y pega los valores, devuelve el layout al formato original
+
+
+Sub PivotCopyFormatValues()
+'select pivot table cell first
+Dim ws As Worksheet
+Set ws = ActiveSheet
+
+Dim pt As PivotTable
+Set pt = ws.PivotTables("piv1")
+
+Dim rngPT As Range
+Dim rngPTa As Range
+Dim rngCopy As Range
+Dim rngCopy2 As Range
+Dim lRowTop As Long
+Dim lRowsPT As Long
+Dim lRowPage As Long
+Dim msgSpace As String
+
+On Error Resume Next
+
+Set rngPTa = pt.PageRange
+
+On Error GoTo errHandler
+
+If pt Is Nothing Then
+    MsgBox "Could not copy pivot table for active cell"
+    GoTo exitHandler
+End If
+
+If pt.PageFieldOrder = xlOverThenDown Then
+  If pt.PageFields.Count > 1 Then
+    msgSpace = "Horizontal filters with spaces." _
+      & vbCrLf _
+      & "Could not copy Filters formatting."
+  End If
+End If
+
+pt.RowAxisLayout xlTabularRow
+pt.RepeatAllLabels xlRepeatLabels
+
+
+'lrowtop = separacion entre el valor default (tomado de la ubicacion de la pivot y el nro para abjo que quiera dar
+Set rngPT = pt.TableRange1
+
+'Define paste DESTINATION as lrowTop = end of PivotRange + 2
+lRowTop = rngPT.Rows(rngPT.Rows.Count + 2).row
+lRowsPT = rngPT.Rows.Count
+
+'Definiendo los margenes del SOURCE
+Set rngCopy = rngPT.Resize(lRowsPT - 1)
+Set rngCopy2 = rngPT.Rows(lRowsPT)
+
+
+rngCopy.Copy
+ws.Cells(lRowTop, 1).PasteSpecial _
+    Paste:=xlPasteAll
+ws.Cells(lRowTop, 1).PasteSpecial _
+    xlPasteAll
+
+rngCopy2.Copy
+ws.Cells(lRowTop + lRowsPT - 1, 1).PasteSpecial _
+    Paste:=xlPasteAll
+ws.Cells(lRowTop + lRowsPT - 1, 1).PasteSpecial _
+    xlPasteAll
+
+
+If Not rngPTa Is Nothing Then
+    lRowPage = rngPTa.Rows(1).row
+    rngPTa.Copy Destination:=ws.Cells(lRowPage, 1)
+End If
+    
+ws.Columns.AutoFit
+If msgSpace <> "" Then
+  MsgBox msgSpace
+End If
+
+
+
+exitHandler:
+    Exit Sub
+errHandler:
+    MsgBox "Could not copy pivot table for active cell"
+    Resume exitHandler
+    
+    pt.RowAxisLayout xlCompactRow
+
+End Sub
