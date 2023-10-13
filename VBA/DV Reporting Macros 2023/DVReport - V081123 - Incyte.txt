@@ -1,0 +1,621 @@
+Sub DVReport()
+
+' INSTRUCTIONS FOR FIRST TIME SET UP - PLEASE READ '
+
+'The DV Report must be set as a custom date range; starting on any Sunday and ending on the Saturday three weeks later _
+ The DV Report must also have the Dimensions and Metrics set up in a specific order for the macro to work _
+ Please view the DV report setup at this link for first-time set up: https://lion.box.com/s/l8vggha13k2tz2wrlyrvc27calsumnar
+    
+    'Enter the FRAUD threshold below for your client, in place of 0.03 (3%)
+    Dim fraudThreshold As Double
+    fraudThreshold = 0.03
+    
+    'Enter the BRAND SAFETY threshold below for your client, in place of 0.06 (6%)
+    Dim brandSafetyThreshold As Double
+    brandSafetyThreshold = 0.04
+    
+    'Enter the OUT OF GEO Rate threshold below for your client, in place of 0.08 (8%)
+    Dim outOfGeoThreshold As Double
+    outOfGeoThreshold = 0.08
+    
+    'Enter the BLOCK RATE threshold below for your client, in place of 0.05 (5%)
+    Dim blockRateThreshold As Double
+    blockRateThreshold = 0.01
+ 
+    'Enter the PMX VIEWABILITY threshold below for your client, in place of 0.6 (60%)
+    Dim pmxViewabilityThreshold As Double
+    pmxViewabilityThreshold = 0.6
+    
+    'Enter the MINIMUM NUMBER OF IMPS you want each line item to reach before it is consider 'LIVE'
+        'This will help avoid false flags for line items with negligible imps
+        'e.g. If you set this to 100, and a pub has 40% viewability but less than 100 imps all week, it won't be flagged until the imp count is over 100 that week
+    Dim impThreshold As Double
+    impThreshold = 100
+    
+' END OF INSTRUCTIONS - DO NOT EDIT ANYTHING BELOW THIS LINE '
+
+'Start the macro
+
+    'Optimization On
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+    Application.EnableAnimations = False
+    Application.EnableEvents = False
+    Application.DisplayStatusBar = False
+    If ActiveSheet.AutoFilterMode Then ActiveSheet.AutoFilterMode = False
+
+    Columns("E:E").Select
+    Selection.Insert Shift:=xlToRight
+    Columns("F:F").Select
+    Selection.Insert Shift:=xlToRight
+    Columns("G:G").Select
+    Selection.Insert Shift:=xlToRight
+    Range("E1").Select
+    ActiveCell.FormulaR1C1 = "Year"
+    Range("E2").Select
+    ActiveCell.FormulaR1C1 = "=YEAR(RC[-1])"
+    Range("F1").Select
+    ActiveCell.FormulaR1C1 = "Week"
+    Range("F2").Select
+    ActiveCell.FormulaR1C1 = "=WEEKNUM(RC[-2])"
+    Range("G1").Select
+    ActiveCell.FormulaR1C1 = "Week of"
+    Range("G2").Select
+    ActiveCell.FormulaR1C1 = "=DATE(R2C5,1,1)+RC[-1]*7-WEEKDAY(DATE(R2C5,1,1))-6"
+    
+    Range("E:F").NumberFormat = "General"
+    
+    lr = Cells.Find("*", Cells(1, 1), xlFormulas, xlPart, xlByRows, xlPrevious, False).Row
+
+    Range("F2:G2").AutoFill Range("F2:G" & lr)
+    
+'Renaming the sheet
+    
+    Range("A1").Select
+    ActiveSheet.Name = "RawData"
+    Range("A1").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Selection, Selection.End(xlToRight)).Select
+
+'Pivot the data
+    Sheets.Add.Name = "Pivot"
+    ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:= _
+        "RawData!R1C1:R1048576C16", Version:=6).CreatePivotTable TableDestination:= _
+        "Pivot!R3C1", TableName:="BrandSafety", DefaultVersion:=6
+    Sheets("Pivot").Select
+    Cells(3, 1).Select
+            
+    With ActiveSheet.PivotTables("BrandSafety").PivotFields("Campaign Name")
+        .Orientation = xlRowField
+        .Position = 1
+    End With
+    With ActiveSheet.PivotTables("BrandSafety").PivotFields("Media Property")
+        .Orientation = xlRowField
+        .Position = 2
+    End With
+    With ActiveSheet.PivotTables("BrandSafety").PivotFields("Placement Name")
+        .Orientation = xlRowField
+        .Position = 3
+    End With
+    
+    Range("A7").Select
+    ActiveSheet.PivotTables("BrandSafety").PivotFields("Media Property").ShowDetail = False
+       
+    ActiveSheet.PivotTables("BrandSafety").AddDataField ActiveSheet.PivotTables( _
+    "BrandSafety").PivotFields("Monitored Ads"), "Sum of Monitored Ads", xlSum
+
+    ActiveSheet.PivotTables("BrandSafety").CalculatedFields.Add "Fraud Rate", _
+        "='Fraud/SIVT Incidents' /'Monitored Ads'", True
+    ActiveSheet.PivotTables("BrandSafety").PivotFields("Fraud Rate").Orientation = _
+        xlDataField
+
+    ActiveSheet.PivotTables("BrandSafety").CalculatedFields.Add "Brand Suitability" _
+        , "='Brand Suitability Incidents' /'Monitored Ads'", True
+    ActiveSheet.PivotTables("BrandSafety").PivotFields("Brand Suitability"). _
+        Orientation = xlDataField
+
+    ActiveSheet.PivotTables("BrandSafety").CalculatedFields.Add "Out of Geo Rate", _
+        "='Out of Geo Incidents' /'Monitored Ads'", True
+    ActiveSheet.PivotTables("BrandSafety").PivotFields("Out of Geo Rate"). _
+        Orientation = xlDataField
+
+    ActiveSheet.PivotTables("BrandSafety").CalculatedFields.Add "Block Rate", _
+        "=Blocks /Requests", True
+    ActiveSheet.PivotTables("BrandSafety").PivotFields("Block Rate").Orientation = _
+        xlDataField
+    
+    Range("A3").Select
+    With ActiveSheet.PivotTables("BrandSafety").PivotFields("Week of")
+        .Orientation = xlColumnField
+        .Position = 2
+    End With
+    With ActiveSheet.PivotTables("BrandSafety").PivotFields( _
+        "Sum of Monitored Ads")
+        .NumberFormat = "#,##0;[Red]#,##0"
+    End With
+    With ActiveSheet.PivotTables("BrandSafety").PivotFields("Campaign Name")
+        .PivotItems("(blank)").Visible = False
+    End With
+    With ActiveSheet.PivotTables("BrandSafety").PivotFields("Week of")
+        .PivotItems("(blank)").Visible = False
+    End With
+    ActiveSheet.PivotTables("BrandSafety").RowGrand = False
+    
+    'Add Media Type Filter
+    On Error Resume Next
+    With ActiveSheet.PivotTables("BrandSafety").PivotFields("Media Type")
+        .Orientation = xlPageField
+        .Position = 1
+    End With
+    On Error GoTo 0
+
+'Monitored ads threshold
+
+Range("D6").Select
+    Range("D6", Range("D65536").End(xlUp)).Select
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlLess, _
+        Formula1:="=100"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16383844
+        .TintAndShade = 0
+    End With
+    
+' Use the threshold variables that the user entered at top of this macro to build the conditional formatting below
+    ' Fraud Threshold
+    Range("G6").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:= _
+        "=AND(D6>" & impThreshold & ",G6>" & fraudThreshold & ")"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16383844
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13551615
+        .TintAndShade = 0
+    End With
+
+    'Brand Safety Threshold
+    Range("J6").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:= _
+        "=AND(D6>" & impThreshold & ",J6>" & brandSafetyThreshold & ")"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16383844
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13551615
+        .TintAndShade = 0
+    End With
+
+'Out of Geo Threshold
+    Range("M6").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:= _
+        "=AND(D6>" & impThreshold & ",M6>" & outOfGeoThreshold & ")"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16383844
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13551615
+        .TintAndShade = 0
+    End With
+
+'Block Rate Threshold
+    Range("P6").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:= _
+        "=AND(D6>" & impThreshold & ",P6>" & blockRateThreshold & ")"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16383844
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13551615
+        .TintAndShade = 0
+    End With
+    
+'Use the threshold variables that the user entered at top of this macro to build a table that displays the thresholds on the Brand Safety worksheet
+    
+    ' Add Threshold table based on stored threshold values
+    Dim ws As Worksheet
+    Set ws = Sheets("Pivot")
+    
+    Dim thresholdValues() As Variant
+    ReDim thresholdValues(1 To 5)
+    thresholdValues(1) = fraudThreshold
+    thresholdValues(2) = brandSafetyThreshold
+    thresholdValues(3) = outOfGeoThreshold
+    thresholdValues(4) = blockRateThreshold
+    thresholdValues(5) = pmxViewabilityThreshold
+    
+    ' Clear previous table and add new table
+    On Error Resume Next
+    ws.ListObjects("ThresholdTable").Delete
+    On Error GoTo 0
+    
+    Dim tblRange As Range
+    Dim tblRange2 As Range
+    Set tblRange = ws.Range("R3:T8")
+    Set tblRange2 = ws.Range("R4:T8")
+    tblRange2.Value = Application.WorksheetFunction.Transpose(thresholdValues)
+    
+     ws.ListObjects.Add(xlSrcRange, tblRange, , xlYes).Name = "ThresholdTable"
+     ws.ListObjects("ThresholdTable").TableStyle = "TableStyleMedium10"
+     
+    Range("ThresholdTable[[#Headers],[Column1]]").Select
+    ActiveCell.FormulaR1C1 = "Metric"
+    Range("ThresholdTable[[#Headers],[Column2]]").Select
+    ActiveCell.FormulaR1C1 = "Minimum Imps"
+    Range("ThresholdTable[[#Headers],[Column3]]").Select
+    ActiveCell.FormulaR1C1 = "Threshold"
+    Range("R4").Select
+    ActiveCell.FormulaR1C1 = "Fraud"
+    Range("R5").Select
+    ActiveCell.FormulaR1C1 = "Brand Safety"
+    Range("R6").Select
+    ActiveCell.FormulaR1C1 = "Out of Geo"
+    Range("R7").Select
+    ActiveCell.FormulaR1C1 = "Block Rate"
+    Range("R8").Select
+    ActiveCell.FormulaR1C1 = "Viewability"
+    Range("ThresholdTable[Threshold]").Select
+    Selection.Style = "Percent"
+    
+    Columns("R:T").Select
+    Selection.Columns.AutoFit
+    
+    'Add impThreshold set above into column S
+    ws.Range("S4:S8").Value = impThreshold
+    
+    'A little extra formatting to the threshold table
+    Range("ThresholdTable[Metric]").Select
+    Selection.Font.Bold = True
+    Range("ThresholdTable[[Minimum Imps]:[Threshold]]").Select
+    Range("T4").Activate
+    With Selection
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlBottom
+    End With
+    
+'End Threshold Table Creation
+
+    ActiveSheet.PivotTables("BrandSafety").ShowTableStyleRowStripes = True
+    ActiveSheet.PivotTables("BrandSafety").TableStyle2 = "PivotStyleMedium9"
+
+    Range("E6").Select
+    Range(Selection, Selection.End(xlToRight)).Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.NumberFormat = "0%"
+    
+    ActiveSheet.Name = "Brand Safety"
+    
+'Clean up formatting, added July 2022
+
+    'Add dividers between metrics so it is more clear which WoW metrics belong to which DV dimension
+    
+        Dim ws2 As Worksheet
+        Dim lastRow As Long
+        Dim Alastrow As Long
+        Set ws2 = ActiveSheet
+        lastRow = ws2.Range("A" & ws2.Rows.Count).End(xlUp).Row
+        
+        'Divider to left of Sum of Fraud Rate
+        Range("E3" & ":E" & lastRow).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        Range("E6").Select
+        Range(Selection, Selection.End(xlDown)).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        
+        'Divider to left of Sum of Brand Suitability Rate
+        Range("H3" & ":H" & lastRow).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        Range("H6").Select
+        Range(Selection, Selection.End(xlDown)).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        
+        'Divider to left of Sum of Out of Geo Rate
+        Range("K3" & ":K" & lastRow).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        Range("K6").Select
+        Range(Selection, Selection.End(xlDown)).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        
+        'Divider to left of Sum of Block Rate
+        Range("N3" & ":N" & lastRow).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        Range("N3:N6").Select
+        Range(Selection, Selection.End(xlDown)).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        
+    'Add Comments to the dimension names
+    Range("D4").AddComment
+    Range("D4").Comment.Visible = False
+    Range("D4").Comment.Text Text:= _
+        "The total count of ads served where any DV Monitoring tags were applied."
+    
+    Range("G4").AddComment
+    Range("G4").Comment.Visible = False
+    Range("G4").Comment.Text Text:= _
+        "='Fraud/SIVT Incidents' / 'Monitored Ads'" & Chr(10) & "" & Chr(10) & "Metrics will not be flagged if Impressions are <100" & Chr(10) & Chr(10) & "Fraud/SIVT is the unique count of Filters, Incidents or Blocks recorded as bot fraud, site fraud, nonhuman data " & Chr(10) & "center traffic and injected ad events." & Chr(10) & "" & Chr(10) & "Incident means the ad was served on a site or next to content that did not meet our brand positioning standards."
+    
+    Range("J4").AddComment
+    Range("J4").Comment.Visible = False
+    Range("J4").Comment.Text Text:= _
+        "='Brand Suitability Incidents'/'Monitored Ads'" & Chr(10) & "" & Chr(10) & "Metrics will not be flagged if Impressions are <100" & Chr(10) & Chr(10) & "Brand Suitability Filters, Incidents or Blocks represent the count of filters, incidents and requests from " & Chr(10) & "apps, sites or pages that served or were prevented from being served because they did not meet one or more of the Brand Suitability settings (such as content categories, keyword exclusion lists, site exclusion list, etc)"
+    
+    Range("M4").AddComment
+    Range("M4").Comment.Visible = False
+    Range("M4").Comment.Text Text:= _
+        "='Out of Geo Incidents'/'Monitored Ads'" & Chr(10) & "" & Chr(10) & "Metrics will not be flagged if Impressions are <100" & Chr(10) & Chr(10) & "Out of Geo Incidents show the number and percentage of ads served outside the designated geographic targeting area."
+    
+    Range("P4").AddComment
+    Range("P4").Comment.Visible = False
+    Range("P4").Comment.Text Text:= _
+        "=Blocks/Requests" & Chr(10) & "" & Chr(10) & "Metrics will not be flagged if Impressions are <100" & Chr(10) & Chr(10) & "Blocks are the count of requests that are blocked because they do not meet the blocking criteria for a DV Digital IQ campaign. This is a " & Chr(10) & "deduplicated measure of all incidents prevented through blocking, including Brand Suitability, Out of Geo, GIVT or Fraud/SIVT." & Chr(10) & "" & Chr(10) & "Requests are not the same as Monitored ads. Requests are the count of requests that are received by the blocking tag when the blocking service is used." & Chr(10) & "" & Chr(10) & "This dimensions only accounts for tags with Blocking enabled, not monitoring-only tags."
+    
+        'This auto-resizes all comment boxes to fit no matter what zoom or screen size the user has
+        Dim xComment As Comment
+        For Each xComment In Application.ActiveSheet.Comments
+            xComment.Shape.TextFrame.AutoSize = True
+        Next
+        
+        'Comment boxes on pivots do not show up by default. This toggles the default to show comments in Pivot Options>Display>ToolTips
+        ActiveSheet.PivotTables("BrandSafety").DisplayContextTooltips = False
+    
+    ActiveWindow.Zoom = 75
+    Columns("A").Select
+    Selection.Columns.AutoFit
+    Columns("B:D").Select
+    Selection.ColumnWidth = 15
+    Columns("E:P").Select
+    Selection.ColumnWidth = 13
+    
+    'bring user view back to upper left of spreadsheet
+    Range("A1").Select
+
+'DV Report Pivot Complete
+
+'Start Viewability Breakout Pivot
+
+    Sheets("RawData").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Selection, Selection.End(xlToRight)).Select
+
+'Pivot the data
+    Application.CutCopyMode = False
+    Sheets.Add.Name = "Pivot2"
+    ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:= _
+        "RawData!R1C1:R1048576C16", Version:=6).CreatePivotTable TableDestination:= _
+        "Pivot2!R3C1", TableName:="ViewabilityPivot", DefaultVersion:=6
+    Sheets("Pivot2").Select
+    ActiveSheet.Name = "PMX Viewability"
+    Cells(3, 1).Select
+            
+    With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Campaign Name")
+        .Orientation = xlRowField
+        .Position = 1
+    End With
+    With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Media Property")
+        .Orientation = xlRowField
+        .Position = 2
+    End With
+    With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Placement Name")
+        .Orientation = xlRowField
+        .Position = 3
+    End With
+    
+    Range("A7").Select
+    ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Media Property").ShowDetail = False
+    
+    ActiveSheet.PivotTables("ViewabilityPivot").AddDataField ActiveSheet.PivotTables( _
+    "ViewabilityPivot").PivotFields("Monitored Ads"), "Sum of Display Monitored Ads", xlSum
+    ActiveSheet.PivotTables("ViewabilityPivot").CalculatedFields.Add "Display PMX Viewability", _
+        "='Total Net PMX Passed Impressions' /'Total Net PMX Measured Impressions'", True
+    ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Display PMX Viewability").Orientation = _
+        xlDataField
+    ActiveSheet.PivotTables("ViewabilityPivot").PivotFields( _
+        "Sum of Display PMX Viewability").Caption = "PMX Viewability Rate"
+    
+    Range("A3").Select
+    With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Week of")
+        .Orientation = xlColumnField
+        .Position = 1
+    End With
+        With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields( _
+        "Sum of Display Monitored Ads")
+        .NumberFormat = "#,##0;[Red]#,##0"
+    End With
+    With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields( _
+        "PMX Viewability Rate")
+        .NumberFormat = "#,##0;[Red]#,##0"
+    End With
+    With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Campaign Name")
+        .PivotItems("(blank)").Visible = False
+    End With
+    With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Week of")
+        .PivotItems("(blank)").Visible = False
+    End With
+    ActiveSheet.PivotTables("ViewabilityPivot").RowGrand = False
+
+    ActiveSheet.PivotTables("ViewabilityPivot").ShowTableStyleRowStripes = True
+    ActiveSheet.PivotTables("ViewabilityPivot").TableStyle2 = "PivotStyleMedium9"
+    
+    'Add Media Type Filter
+    On Error Resume Next
+    With ActiveSheet.PivotTables("ViewabilityPivot").PivotFields("Media Type")
+        .Orientation = xlPageField
+        .Position = 1
+    End With
+    On Error GoTo 0
+        
+    'Condition Formatting: Display Impressions threshold
+    Range("G6").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.FormatConditions.Add Type:=xlExpression, Operator:=xlLess, _
+        Formula1:="=AND(B6>" & impThreshold & ",G6<" & pmxViewabilityThreshold & ")"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16383844
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13551615
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    
+    'More (non-conditional) formatting: Add dividers between metrics so it is more clear which WoW metrics belong to which DV dimension
+    
+        Dim ws1 As Worksheet
+        Dim lastRow1 As Long
+        Dim Alastrow1 As Long
+        Set ws1 = ActiveSheet
+        lastRow = ws.Range("A" & ws.Rows.Count).End(xlUp).Row
+
+        'Divider to left of Sum of Video Monitored Ads
+        Range("D3" & ":D" & lastRow).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        Range("D6").Select
+        Range(Selection, Selection.End(xlDown)).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        
+        'Divider to left of Sum of Display Viewability
+        Range("F3" & ":F" & lastRow).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+        Range("F6").Select
+        Range(Selection, Selection.End(xlDown)).Select
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .ColorIndex = 0
+            .TintAndShade = 0
+            .Weight = xlThin
+        End With
+
+        'This auto-resizes all comment boxes to fit no matter what zoom or screen size the user has
+        Dim xComment1 As Comment
+        For Each xComment In Application.ActiveSheet.Comments
+            xComment1.Shape.TextFrame.AutoSize = True
+        Next
+        
+        'Comment boxes on pivots do not show up by default. This toggles the default to show comments in Pivot Options>Display>ToolTips
+        ActiveSheet.PivotTables("ViewabilityPivot").DisplayContextTooltips = False
+        
+    'Hide the #DIV! Errors
+    Worksheets("Brand Safety").PivotTables("BrandSafety").DisplayErrorString = True
+    Worksheets("PMX Viewability").PivotTables("ViewabilityPivot").DisplayErrorString = True
+    
+    'Change to Percentages
+    Worksheets("PMX Viewability").Range("C:C,E:E,G:G").Select
+    Selection.Style = "Percent"
+    Selection.NumberFormat = "0.0%"
+    
+    'Adjust columns and zoom so dates are not truncated by default
+    ActiveWindow.Zoom = 75
+    Columns("A").Select
+    Selection.Columns.AutoFit
+    Range("B5:G5").Select
+    Selection.Columns.AutoFit
+    Range("B4:G4").Select
+    Selection.HorizontalAlignment = xlLeft
+        
+    'bring user view back to upper left of spreadsheet
+    Range("A1").Select
+    Sheets("RawData").Select
+    Range("A1").Select
+    Sheets("Brand Safety").Select
+    Range("A1").Select
+    
+    'Save file as XLSX and give a name. If running on PC (or if an error happens on PC), prompt the user to manually save as XLSX, not CSV
+    On Error GoTo eh1
+    Path = Environ$("USERPROFILE") & "\Downloads" & "\"
+    ActiveWorkbook.SaveAs filename:=Path & "DV Viewability Report" & Format(CStr(Now()), " MM.DD.YYYY") & ".xlsx", FileFormat:=51
+    
+    GoTo skipmanualsave
+
+eh1:
+    Dim fNameAndPath As Variant
+            MsgBox "Please save a copy of this workbook as a .xlsx file." & vbNewLine & "You will be prompted to save when you click OK.", vbInformation
+    fNameAndPath = Application.GetSaveAsFilename(InitialFileName:=ThisWorkbook.Path & "\", FileFilter:="Excel Files (*.xlsx), *.xlsx", Title:="Save As")
+        If fNameAndPath = False Then Exit Sub
+            ActiveWorkbook.SaveAs filename:=fNameAndPath, FileFormat:=xlOpenXMLWorkbook
+            
+skipmanualsave:
+
+'Optimization Off
+Application.DisplayAlerts = True
+Application.WindowState = xlMaximized
+Application.ScreenUpdating = True
+Application.EnableAnimations = True
+Application.EnableEvents = True
+Application.DisplayStatusBar = True
+ActiveSheet.DisplayPageBreaks = False
+    
+End Sub
